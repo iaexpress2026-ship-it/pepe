@@ -1,0 +1,669 @@
+diff --git a/src/pages/Index.tsx b/src/pages/Index.tsx
+index c6cb27a663952693aef0427d94ace702823e69b4..6e18ee8b89335fb0405450dd09b0ab75d6966744 100644
+--- a/src/pages/Index.tsx
++++ b/src/pages/Index.tsx
+@@ -1,21 +1,650 @@
+-import Navbar from "@/components/Navbar";
+-import HeroSection from "@/components/HeroSection";
+-import AdoptionGuide from "@/components/AdoptionGuide";
+-import BreedSection from "@/components/BreedSection";
+-import GeneralCare from "@/components/GeneralCare";
+-import Footer from "@/components/Footer";
++import { useEffect, useMemo, useState } from "react";
++import { Avatar, AvatarFallback } from "@/components/ui/avatar";
++import { Badge } from "@/components/ui/badge";
++import { Button } from "@/components/ui/button";
++import {
++  Card,
++  CardContent,
++  CardDescription,
++  CardHeader,
++  CardTitle,
++} from "@/components/ui/card";
++import { Input } from "@/components/ui/input";
++import { Progress } from "@/components/ui/progress";
++import { ScrollArea } from "@/components/ui/scroll-area";
++import {
++  Select,
++  SelectContent,
++  SelectItem,
++  SelectTrigger,
++  SelectValue,
++} from "@/components/ui/select";
++import {
++  Table,
++  TableBody,
++  TableCell,
++  TableHead,
++  TableHeader,
++  TableRow,
++} from "@/components/ui/table";
++import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
++
++type DealStage =
++  | "nuevo"
++  | "contactado"
++  | "propuesta"
++  | "negociacion"
++  | "cerrado";
++
++type LeadSource = "Inbound" | "Outbound" | "Partner";
++
++type Deal = {
++  id: string;
++  company: string;
++  owner: string;
++  value: number;
++  stage: DealStage;
++  probability: number;
++  lastActivity: string;
++  source: LeadSource;
++};
++
++const STORAGE_KEY = "crm-deals-v1";
++
++const stageConfig: { id: DealStage; name: string; probabilityHint: number }[] = [
++  { id: "nuevo", name: "Nuevo lead", probabilityHint: 20 },
++  { id: "contactado", name: "Contactado", probabilityHint: 40 },
++  { id: "propuesta", name: "Propuesta", probabilityHint: 65 },
++  { id: "negociacion", name: "Negociación", probabilityHint: 85 },
++  { id: "cerrado", name: "Cerrado", probabilityHint: 100 },
++];
++
++const sourceOptions: LeadSource[] = ["Inbound", "Outbound", "Partner"];
++
++const initialDeals: Deal[] = [
++  {
++    id: "D-102",
++    company: "Innova Tech",
++    owner: "Laura",
++    value: 24500,
++    stage: "propuesta",
++    probability: 70,
++    lastActivity: "hace 2 horas",
++    source: "Inbound",
++  },
++  {
++    id: "D-103",
++    company: "Soluciones Delta",
++    owner: "Martín",
++    value: 9400,
++    stage: "contactado",
++    probability: 45,
++    lastActivity: "hace 5 horas",
++    source: "Outbound",
++  },
++  {
++    id: "D-104",
++    company: "Retail Nova",
++    owner: "Sofía",
++    value: 31200,
++    stage: "nuevo",
++    probability: 25,
++    lastActivity: "hace 20 minutos",
++    source: "Partner",
++  },
++  {
++    id: "D-105",
++    company: "Logística Andina",
++    owner: "Laura",
++    value: 15700,
++    stage: "cerrado",
++    probability: 100,
++    lastActivity: "ayer",
++    source: "Inbound",
++  },
++  {
++    id: "D-106",
++    company: "FinOps Studio",
++    owner: "Camila",
++    value: 12800,
++    stage: "negociacion",
++    probability: 80,
++    lastActivity: "hace 1 día",
++    source: "Outbound",
++  },
++  {
++    id: "D-107",
++    company: "Métrica Cloud",
++    owner: "Sofía",
++    value: 8600,
++    stage: "contactado",
++    probability: 40,
++    lastActivity: "hace 30 minutos",
++    source: "Inbound",
++  },
++];
++
++const contacts = [
++  {
++    name: "Valentina Ruiz",
++    company: "Innova Tech",
++    email: "valentina@innovatech.com",
++    status: "Cliente potencial",
++  },
++  {
++    name: "Daniel Ponce",
++    company: "Retail Nova",
++    email: "dponce@retailnova.com",
++    status: "En negociación",
++  },
++  {
++    name: "Elena Soto",
++    company: "Logística Andina",
++    email: "esoto@logisticaandina.com",
++    status: "Cliente",
++  },
++  {
++    name: "Tomás Rivera",
++    company: "FinOps Studio",
++    email: "trivera@finops.studio",
++    status: "Cliente potencial",
++  },
++];
++
++const tasks = [
++  { title: "Llamar a Innova Tech", due: "Hoy 16:30", priority: "Alta" },
++  {
++    title: "Enviar contrato a Logística Andina",
++    due: "Hoy 18:00",
++    priority: "Alta",
++  },
++  { title: "Demo con Retail Nova", due: "Mañana 09:00", priority: "Media" },
++  {
++    title: "Actualizar notas de seguimiento",
++    due: "Mañana 12:00",
++    priority: "Baja",
++  },
++];
++
++const formatCurrency = (value: number) =>
++  new Intl.NumberFormat("es-ES", {
++    style: "currency",
++    currency: "EUR",
++    maximumFractionDigits: 0,
++  }).format(value);
+ 
+ const Index = () => {
++  const [deals, setDeals] = useState<Deal[]>(initialDeals);
++  const [search, setSearch] = useState("");
++  const [activeStage, setActiveStage] = useState<DealStage | "todos">("todos");
++
++  const [newCompany, setNewCompany] = useState("");
++  const [newOwner, setNewOwner] = useState("");
++  const [newValue, setNewValue] = useState("");
++  const [newSource, setNewSource] = useState<LeadSource>("Inbound");
++  const [leadError, setLeadError] = useState("");
++
++  useEffect(() => {
++    const raw = localStorage.getItem(STORAGE_KEY);
++    if (!raw) return;
++
++    const parsed = JSON.parse(raw) as Deal[];
++    if (Array.isArray(parsed) && parsed.length > 0) {
++      setDeals(parsed);
++    }
++  }, []);
++
++  useEffect(() => {
++    localStorage.setItem(STORAGE_KEY, JSON.stringify(deals));
++  }, [deals]);
++
++  const filteredDeals = useMemo(
++    () =>
++      deals.filter((deal) => {
++        const matchesSearch =
++          deal.company.toLowerCase().includes(search.toLowerCase()) ||
++          deal.owner.toLowerCase().includes(search.toLowerCase());
++        const matchesStage = activeStage === "todos" || deal.stage === activeStage;
++        return matchesSearch && matchesStage;
++      }),
++    [deals, search, activeStage],
++  );
++
++  const totalPipeline = filteredDeals.reduce((sum, deal) => sum + deal.value, 0);
++  const weightedForecast = filteredDeals.reduce(
++    (sum, deal) => sum + deal.value * (deal.probability / 100),
++    0,
++  );
++  const wonDeals = filteredDeals.filter((deal) => deal.stage === "cerrado").length;
++  const conversion = filteredDeals.length
++    ? Math.round((wonDeals / filteredDeals.length) * 100)
++    : 0;
++
++  const leadBySource = useMemo(() => {
++    const grouped = { Inbound: 0, Outbound: 0, Partner: 0 };
++    for (const deal of filteredDeals) grouped[deal.source] += 1;
++    return grouped;
++  }, [filteredDeals]);
++
++  const stageSummary = stageConfig.map((stage) => {
++    const stageDeals = filteredDeals.filter((deal) => deal.stage === stage.id);
++    return {
++      ...stage,
++      count: stageDeals.length,
++      total: stageDeals.reduce((sum, deal) => sum + deal.value, 0),
++    };
++  });
++
++  const clearFilters = () => {
++    setSearch("");
++    setActiveStage("todos");
++  };
++
++  const addLead = () => {
++    const parsedValue = Number(newValue);
++    if (!newCompany.trim() || !newOwner.trim()) {
++      setLeadError("Completa empresa y ejecutivo para crear el lead.");
++      return;
++    }
++    if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
++      setLeadError("El valor estimado debe ser un número mayor a 0.");
++      return;
++    }
++
++    const numericIds = deals
++      .map((deal) => Number(deal.id.replace("D-", "")))
++      .filter((id) => Number.isFinite(id));
++    const nextId = Math.max(101, ...numericIds) + 1;
++
++    const newDeal: Deal = {
++      id: `D-${nextId}`,
++      company: newCompany.trim(),
++      owner: newOwner.trim(),
++      value: parsedValue,
++      stage: "nuevo",
++      probability: 20,
++      lastActivity: "recién creado",
++      source: newSource,
++    };
++
++    setDeals((prev) => [newDeal, ...prev]);
++    setLeadError("");
++    setNewCompany("");
++    setNewOwner("");
++    setNewValue("");
++    setNewSource("Inbound");
++  };
++
++  const moveDeal = (dealId: string, direction: "next" | "prev") => {
++    setDeals((prev) =>
++      prev.map((deal) => {
++        if (deal.id !== dealId) return deal;
++
++        const currentIndex = stageConfig.findIndex((stage) => stage.id === deal.stage);
++        const targetIndex =
++          direction === "next"
++            ? Math.min(currentIndex + 1, stageConfig.length - 1)
++            : Math.max(currentIndex - 1, 0);
++
++        if (targetIndex === currentIndex) return deal;
++
++        const targetStage = stageConfig[targetIndex];
++        return {
++          ...deal,
++          stage: targetStage.id,
++          probability: targetStage.probabilityHint,
++          lastActivity: "actualizado ahora",
++        };
++      }),
++    );
++  };
++
+   return (
+-    <div className="min-h-screen bg-background font-body">
+-      <Navbar />
+-      <HeroSection />
+-      <AdoptionGuide />
+-      <BreedSection />
+-      <GeneralCare />
+-      <Footer />
++    <div className="min-h-screen bg-slate-100 text-slate-900">
++      <main className="mx-auto max-w-7xl space-y-6 p-6">
++        <header className="rounded-xl bg-white p-6 shadow-sm">
++          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
++            <div>
++              <p className="text-sm text-muted-foreground">Workspace comercial · Q2</p>
++              <h1 className="text-3xl font-bold tracking-tight">CRM Comercial 360</h1>
++              <p className="mt-1 text-sm text-muted-foreground">
++                Supervisa pipeline, crea leads y prioriza acciones en una sola vista.
++              </p>
++            </div>
++            <div className="flex w-full flex-col gap-2 md:flex-row lg:w-auto">
++              <Input
++                value={search}
++                onChange={(event) => setSearch(event.target.value)}
++                placeholder="Buscar empresa o ejecutivo"
++                className="md:w-72"
++              />
++              <Button variant="secondary" onClick={clearFilters}>
++                Limpiar filtros
++              </Button>
++            </div>
++          </div>
++
++          <div className="mt-4 grid gap-2 md:grid-cols-5">
++            <Input
++              value={newCompany}
++              onChange={(e) => setNewCompany(e.target.value)}
++              placeholder="Empresa"
++            />
++            <Input
++              value={newOwner}
++              onChange={(e) => setNewOwner(e.target.value)}
++              placeholder="Ejecutivo"
++            />
++            <Input
++              value={newValue}
++              onChange={(e) => setNewValue(e.target.value)}
++              placeholder="Valor estimado"
++              type="number"
++              min={1}
++            />
++            <Select
++              value={newSource}
++              onValueChange={(value) => setNewSource(value as LeadSource)}
++            >
++              <SelectTrigger>
++                <SelectValue placeholder="Origen" />
++              </SelectTrigger>
++              <SelectContent>
++                {sourceOptions.map((source) => (
++                  <SelectItem key={source} value={source}>
++                    {source}
++                  </SelectItem>
++                ))}
++              </SelectContent>
++            </Select>
++            <Button onClick={addLead}>Crear lead</Button>
++          </div>
++          {leadError ? (
++            <p className="mt-2 text-sm text-red-600">{leadError}</p>
++          ) : null}
++        </header>
++
++        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
++          <Card>
++            <CardHeader className="pb-2">
++              <CardDescription>Pipeline visible</CardDescription>
++              <CardTitle className="text-2xl">{formatCurrency(totalPipeline)}</CardTitle>
++            </CardHeader>
++          </Card>
++
++          <Card>
++            <CardHeader className="pb-2">
++              <CardDescription>Forecast ponderado</CardDescription>
++              <CardTitle className="text-2xl">
++                {formatCurrency(Math.round(weightedForecast))}
++              </CardTitle>
++            </CardHeader>
++          </Card>
++
++          <Card>
++            <CardHeader className="pb-2">
++              <CardDescription>Tasa de cierre</CardDescription>
++              <CardTitle className="text-2xl">{conversion}%</CardTitle>
++            </CardHeader>
++            <CardContent className="space-y-2">
++              <Progress value={conversion} className="h-2" />
++              <p className="text-xs text-muted-foreground">
++                {wonDeals} cerrados sobre {filteredDeals.length} activos.
++              </p>
++            </CardContent>
++          </Card>
++
++          <Card>
++            <CardHeader className="pb-2">
++              <CardDescription>Leads por origen</CardDescription>
++              <CardTitle className="text-base">
++                In {leadBySource.Inbound} · Out {leadBySource.Outbound} · Par{" "}
++                {leadBySource.Partner}
++              </CardTitle>
++            </CardHeader>
++          </Card>
++        </section>
++
++        <Tabs defaultValue="dashboard" className="space-y-4">
++          <TabsList className="flex h-auto flex-wrap justify-start gap-2 bg-transparent p-0">
++            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
++            <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
++            <TabsTrigger value="kanban">Kanban</TabsTrigger>
++            <TabsTrigger value="contactos">Contactos</TabsTrigger>
++            <TabsTrigger value="actividades">Actividades</TabsTrigger>
++          </TabsList>
++
++          <TabsContent value="dashboard" className="grid gap-4 lg:grid-cols-5">
++            <Card className="lg:col-span-3">
++              <CardHeader>
++                <CardTitle>Embudo por etapas</CardTitle>
++                <CardDescription>
++                  Haz clic en una etapa para filtrar oportunidades.
++                </CardDescription>
++              </CardHeader>
++              <CardContent className="space-y-3">
++                {stageSummary.map((stage) => (
++                  <button
++                    key={stage.id}
++                    onClick={() => setActiveStage(stage.id)}
++                    className="flex w-full items-center justify-between rounded-lg border bg-white px-3 py-2 text-left transition hover:border-primary"
++                    type="button"
++                  >
++                    <div>
++                      <p className="font-medium">{stage.name}</p>
++                      <p className="text-xs text-muted-foreground">
++                        {stage.count} oportunidad(es)
++                      </p>
++                    </div>
++                    <Badge variant="outline">{formatCurrency(stage.total)}</Badge>
++                  </button>
++                ))}
++              </CardContent>
++            </Card>
++
++            <Card className="lg:col-span-2">
++              <CardHeader>
++                <CardTitle>Agenda comercial</CardTitle>
++                <CardDescription>Tareas críticas del equipo.</CardDescription>
++              </CardHeader>
++              <CardContent className="space-y-3">
++                {tasks.map((task) => (
++                  <div key={task.title} className="rounded-lg border bg-white p-3">
++                    <div className="flex items-center justify-between">
++                      <p className="text-sm font-medium">{task.title}</p>
++                      <Badge
++                        variant={
++                          task.priority === "Alta" ? "destructive" : "secondary"
++                        }
++                      >
++                        {task.priority}
++                      </Badge>
++                    </div>
++                    <p className="text-xs text-muted-foreground">{task.due}</p>
++                  </div>
++                ))}
++              </CardContent>
++            </Card>
++          </TabsContent>
++
++          <TabsContent value="pipeline">
++            <Card>
++              <CardHeader>
++                <CardTitle>Oportunidades comerciales</CardTitle>
++                <CardDescription>
++                  Vista tabular de deals con probabilidad, origen y avance de etapa.
++                </CardDescription>
++              </CardHeader>
++              <CardContent>
++                <Table>
++                  <TableHeader>
++                    <TableRow>
++                      <TableHead>ID</TableHead>
++                      <TableHead>Empresa</TableHead>
++                      <TableHead>Ejecutivo</TableHead>
++                      <TableHead>Etapa</TableHead>
++                      <TableHead>Origen</TableHead>
++                      <TableHead>Valor</TableHead>
++                      <TableHead>Probabilidad</TableHead>
++                      <TableHead className="text-right">Mover</TableHead>
++                    </TableRow>
++                  </TableHeader>
++                  <TableBody>
++                    {filteredDeals.length === 0 ? (
++                      <TableRow>
++                        <TableCell
++                          colSpan={8}
++                          className="text-center text-muted-foreground"
++                        >
++                          No hay oportunidades con los filtros actuales.
++                        </TableCell>
++                      </TableRow>
++                    ) : (
++                      filteredDeals.map((deal) => (
++                        <TableRow key={deal.id}>
++                          <TableCell className="font-medium">{deal.id}</TableCell>
++                          <TableCell>{deal.company}</TableCell>
++                          <TableCell>{deal.owner}</TableCell>
++                          <TableCell>
++                            <Badge
++                              variant={
++                                deal.stage === "cerrado" ? "default" : "secondary"
++                              }
++                            >
++                              {stageConfig.find((stage) => stage.id === deal.stage)?.name}
++                            </Badge>
++                          </TableCell>
++                          <TableCell>{deal.source}</TableCell>
++                          <TableCell>{formatCurrency(deal.value)}</TableCell>
++                          <TableCell>{deal.probability}%</TableCell>
++                          <TableCell className="text-right">
++                            <div className="flex justify-end gap-2">
++                              <Button
++                                type="button"
++                                size="sm"
++                                variant="outline"
++                                onClick={() => moveDeal(deal.id, "prev")}
++                              >
++                                ←
++                              </Button>
++                              <Button
++                                type="button"
++                                size="sm"
++                                variant="outline"
++                                onClick={() => moveDeal(deal.id, "next")}
++                              >
++                                →
++                              </Button>
++                            </div>
++                          </TableCell>
++                        </TableRow>
++                      ))
++                    )}
++                  </TableBody>
++                </Table>
++              </CardContent>
++            </Card>
++          </TabsContent>
++
++          <TabsContent value="kanban">
++            <div className="grid gap-4 lg:grid-cols-5">
++              {stageConfig.map((stage) => {
++                const stageDeals = filteredDeals.filter((deal) => deal.stage === stage.id);
++                return (
++                  <Card key={stage.id}>
++                    <CardHeader className="pb-2">
++                      <CardTitle className="text-sm">{stage.name}</CardTitle>
++                    </CardHeader>
++                    <CardContent className="space-y-2">
++                      {stageDeals.length === 0 ? (
++                        <p className="text-xs text-muted-foreground">Sin oportunidades</p>
++                      ) : (
++                        stageDeals.map((deal) => (
++                          <div key={deal.id} className="rounded-md border bg-white p-2">
++                            <p className="text-sm font-medium">{deal.company}</p>
++                            <p className="text-xs text-muted-foreground">{deal.owner}</p>
++                            <p className="text-xs">{formatCurrency(deal.value)}</p>
++                            <p className="text-xs text-muted-foreground">
++                              {deal.source} · {deal.probability}%
++                            </p>
++                          </div>
++                        ))
++                      )}
++                    </CardContent>
++                  </Card>
++                );
++              })}
++            </div>
++          </TabsContent>
++
++          <TabsContent value="contactos">
++            <Card>
++              <CardHeader>
++                <CardTitle>Contactos clave</CardTitle>
++                <CardDescription>
++                  Base relacional de stakeholders por cuenta.
++                </CardDescription>
++              </CardHeader>
++              <CardContent className="space-y-3">
++                {contacts.map((contact) => (
++                  <div
++                    key={contact.email}
++                    className="flex flex-col gap-2 rounded-lg border bg-white p-3 md:flex-row md:items-center md:justify-between"
++                  >
++                    <div className="flex items-center gap-3">
++                      <Avatar>
++                        <AvatarFallback>
++                          {contact.name.slice(0, 2).toUpperCase()}
++                        </AvatarFallback>
++                      </Avatar>
++                      <div>
++                        <p className="font-medium">{contact.name}</p>
++                        <p className="text-sm text-muted-foreground">
++                          {contact.company} · {contact.email}
++                        </p>
++                      </div>
++                    </div>
++                    <Badge variant="outline">{contact.status}</Badge>
++                  </div>
++                ))}
++              </CardContent>
++            </Card>
++          </TabsContent>
++
++          <TabsContent value="actividades">
++            <Card>
++              <CardHeader>
++                <CardTitle>Actividad reciente</CardTitle>
++                <CardDescription>
++                  Seguimiento operativo y última interacción comercial.
++                </CardDescription>
++              </CardHeader>
++              <CardContent>
++                <ScrollArea className="h-64">
++                  <div className="space-y-3 pr-4">
++                    {deals.map((deal) => (
++                      <div
++                        key={`${deal.id}-activity`}
++                        className="rounded-lg border bg-white p-4"
++                      >
++                        <div className="flex items-center justify-between">
++                          <p className="font-medium">{deal.company}</p>
++                          <Badge variant="outline">{deal.lastActivity}</Badge>
++                        </div>
++                        <p className="text-sm text-muted-foreground">
++                          Ejecutivo: {deal.owner}
++                        </p>
++                      </div>
++                    ))}
++                  </div>
++                </ScrollArea>
++              </CardContent>
++            </Card>
++          </TabsContent>
++        </Tabs>
++      </main>
+     </div>
+   );
+ };
+ 
+ export default Index;
+
